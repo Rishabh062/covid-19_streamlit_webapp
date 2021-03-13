@@ -1,57 +1,63 @@
+# importing libraries
 import streamlit as st
-import PIL
+import pandas as pd
 import numpy as np
-import torch
-import time
-import os
-import matplotlib.image as mpimg
-from fastai.vision import open_image, load_learner, image, torch
-from PIL import Image, ImageOps
-from predict import infer
+import plotly.express as px
 
-st.title("Chest X-Ray Classification Application")
-st.header("Classification Example")
+# importing the dataset
+@st.cache(ttl=60*5,max_entries=20)
+def load_data():
+    data = pd.read_csv("https://api.covid19india.org/csv/latest/state_wise.csv")
+    return data
 
-option = st.radio('', ['Choose a Sample XRay', 'Upload your own XRay'])
+data=load_data()
 
-if option == 'Choose a Sample XRay':
-    # Get a list of test images in the folder
-    test_imgs = os.listdir("test_imgs/")
-    test_img = st.selectbox(
-        'Please Select a Test Image:',
-        test_imgs
-    )
-    
-    # Display and then predict on that image
-    fl_path = "test_imgs/"+test_img
-    img = open_image(fl_path)
-    
-    display_img = mpimg.imread(fl_path)
-    st.image(display_img, caption="Chosen XRay", use_column_width=True)
-    
-    st.write("")
-    with st.spinner("Identifying the Disease..."):
-        time.sleep(5)
-    label, prob = infer(img)
-    st.success(f"Image Disease: {label}, Confidence: {prob:.2f}%")
+# creating title,text content and slide menu
+st.markdown('<style>description{color:rgb(255,0,0);}</style>',unsafe_allow_html=True)
+st.title("🦠 Covid-19 Impact in India")
+st.markdown("<description>The main objective of this website is to offer an on-going assesment of"+"COVID-19 impact in India.This website gives you the real-time impact analysis of confirmation,"+
+"active,recovery and death cases of Covid-19 on Nation-,state-,District-level basis."+
+"The website's data is updating every 5 minutes in order to ensure the delivery of true and "+
+"accurate data.</description>",unsafe_allow_html=True)
+st.sidebar.title('Select the parameters to analyze Covid-19 situation')
+st.sidebar.checkbox("Show Analysis by State", True, key=1)
+select = st.sidebar.selectbox('Select a State',data['State'])
+#get the state selected in the selectbox
+state_data = data[data['State'] == select]
+select_status = st.sidebar.radio("Covid-19 patient's status", ('Confirmed',
+'Active', 'Recovered', 'Deceased'))
 
-elif option == 'Upload your own XRay':
-    uploaded_file = st.file_uploader("Choose an Image", type=['jpg', 'png', 'jpeg'])
+# define functions here
 
-    if uploaded_file is not None:
-        img = Image.open(uploaded_file)
-        st.image(img, caption="Uploaded XRay", use_column_width=True)
-        
-        img = image.pil2tensor(img, np.float32).div_(255)
-        img = image.Image(img)
-        st.write("")
-        with st.spinner("Identifying the Disease..."):
-            time.sleep(5)
-        label, prob = infer(img)
-        
-        st.success(f"Image Disease: {label}, Confidence: {prob:.2f}%")
+def get_total_dataframe(dataset):
+    total_dataframe = pd.DataFrame({
+    'Status':['Confirmed', 'Active', 'Recovered', 'Deaths'],
+    'Number of cases':(dataset.iloc[0]['Confirmed'],
+    dataset.iloc[0]['Active'], dataset.iloc[0]['Recovered'],
+    dataset.iloc[0]['Deaths'])})
+    return total_dataframe
+state_total = get_total_dataframe(state_data)
+if st.sidebar.checkbox("Show Analysis by State", True, key=2):
+    st.markdown("## **State level analysis**")
+    st.markdown("### Overall Confirmed, Active, Recovered and " +
+    "Deceased cases in %s yet" % (select))
+    if not st.checkbox('Hide Graph', False, key=1):
+        state_total_graph = px.bar(
+        state_total, 
+        x='Status',
+        y='Number of cases',
+        labels={'Number of cases':'Number of cases in %s' % (select)},
+        color='Status')
+        st.plotly_chart(state_total_graph)
 
-st.warning("NOTE: If you upload an Image which is not a Chest XRay, the model will give very wierd predictions because it's trained to identify which one of the 2 labels the model is most confident of.")
-
-
-st.write("Made with ❤ by Tanay Mehta")
+# get table function
+def get_table():
+    datatable = data[['State', 'Confirmed', 'Active', 'Recovered', 'Deaths']].sort_values(by=['Confirmed'], ascending=False)
+    datatable = datatable[datatable['State'] != 'State Unassigned']
+    return datatable
+datatable = get_table()
+st.markdown("### Covid-19 cases in India")
+st.markdown("The following table gives you a real-time analysis of the confirmed, active, recovered and deceased cases of Covid-19 pertaining to each state in India.")
+st.dataframe(datatable) # will display the dataframe
+st.table(datatable)# will display the table
+st.write("Made with ❤ by Rishabh Dwivedi")
